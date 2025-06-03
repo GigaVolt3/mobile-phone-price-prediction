@@ -18,6 +18,11 @@ model = None
 scaler = None
 knn = None
 brands = []
+all_brand_columns = []
+# Feature definitions
+numeric_features = ['ram', 'storage', 'battery', 'screen_size', 'refresh_rate', 'rear_cameras']
+categorical_features = ['brand']
+features = numeric_features + categorical_features
 
 # Load and preprocess data
 def load_data():
@@ -97,28 +102,50 @@ def load_data():
             median_value = df[feature].median()
             df[feature] = df[feature].fillna(median_value).astype(float)
         
-        # Get unique brands
+        # Get unique brands and ensure they're in the correct format
+        df['brand'] = df['brand'].str.strip().str.lower()
         brands = sorted(df['brand'].str.upper().unique().tolist())
         
-        # Features for prediction
-        features = ['ram', 'storage', 'battery', 'screen_size', 'refresh_rate', 'rear_cameras']
+        # Ensure categorical columns are of type string
+        for col in categorical_features:
+            df[col] = df[col].astype(str).str.strip()
+            
+        # Update global all_brand_columns
+        global all_brand_columns
         
         # Prepare data for KNN
         df_knn = df[features + ['price']].dropna()
-        X_knn = df_knn[features]
-        y_knn = df_knn['price']
         
-        # Scale features for KNN
+        # One-hot encode the brand column for KNN
+        df_knn_encoded = pd.get_dummies(df_knn, columns=['brand'], prefix='brand')
+        
+        # Update the list of all possible brand columns
+        all_brand_columns = [col for col in df_knn_encoded.columns if col.startswith('brand_')]
+        
+        # Ensure all numeric features are present
+        for feat in numeric_features:
+            if feat not in df_knn_encoded.columns:
+                df_knn_encoded[feat] = 0
+                
+        X_knn = df_knn_encoded[numeric_features + all_brand_columns]
+        y_knn = df_knn_encoded['price']
+        
+        # Scale only the numeric features for KNN
         scaler = StandardScaler()
-        X_scaled = scaler.fit_transform(X_knn)
+        X_scaled = X_knn.copy()
+        X_scaled[numeric_features] = scaler.fit_transform(X_knn[numeric_features])
         
         # Train KNN model
         knn = NearestNeighbors(n_neighbors=5, metric='euclidean')
         knn.fit(X_scaled)
         
         # Train Linear Regression model
-        X = df_knn[features]
+        X = df_knn[features].copy()
         y = y_knn
+        
+        # Ensure categorical columns are strings
+        for col in categorical_features:
+            X[col] = X[col].astype(str).str.strip()
         
         # Create preprocessing pipeline
         numeric_transformer = Pipeline(steps=[
@@ -126,10 +153,18 @@ def load_data():
             ('scaler', StandardScaler())
         ])
         
+        categorical_transformer = Pipeline(steps=[
+            ('imputer', SimpleImputer(strategy='constant', fill_value='unknown')),
+            ('onehot', OneHotEncoder(handle_unknown='infrequent_if_exist', sparse_output=False))
+        ])
+        
         preprocessor = ColumnTransformer(
             transformers=[
-                ('num', numeric_transformer, features)
-            ])
+                ('num', numeric_transformer, numeric_features),
+                ('cat', categorical_transformer, categorical_features)
+            ],
+            remainder='drop'  # Drop any columns not explicitly transformed
+        )
         
         # Create and train the model
         model = Pipeline(steps=[
@@ -183,6 +218,13 @@ def predict():
             screen_size = float(request.form.get('screen_size', 0))
             refresh_rate = float(request.form.get('refresh_rate', 60))
             rear_cameras = int(request.form.get('rear_cameras', 2))
+            brand = request.form.get('brand', '').strip().lower()
+            
+            if not brand:
+                return jsonify({
+                    'status': 'error',
+                    'message': 'Brand is required for prediction.'
+                }), 400
         except (ValueError, TypeError) as e:
             return jsonify({
                 'status': 'error',
@@ -196,35 +238,85 @@ def predict():
             'battery': [battery],
             'screen_size': [screen_size],
             'refresh_rate': [refresh_rate],
-            'rear_cameras': [rear_cameras]
+            'rear_cameras': [rear_cameras],
+            'brand': [brand]  # Keep brand as string for categorical encoding
         })
         
         # Ensure all numeric columns are float
-        for col in input_data.columns:
+        numeric_cols = ['ram', 'storage', 'battery', 'screen_size', 'refresh_rate', 'rear_cameras']
+        for col in numeric_cols:
             input_data[col] = pd.to_numeric(input_data[col], errors='coerce')
         
-        # Fill any remaining NaN values with column means from training data
-        for col in input_data.columns:
+        # Fill any remaining NaN values with column medians from training data
+        for col in numeric_cols:
             if input_data[col].isna().any() and col in df.columns:
                 input_data[col] = input_data[col].fillna(df[col].median())
         
+        # Ensure brand is in the correct format
+        if 'brand' in input_data.columns and input_data['brand'].dtype != 'object':
+            input_data['brand'] = input_data['brand'].astype(str)
+            
         # Predict price
-        predicted_price = model.predict(input_data)[0]
-        
-        # Prepare features for KNN
-        features = ['ram', 'storage', 'battery', 'screen_size', 'refresh_rate', 'rear_cameras']
-        
-        # Ensure all features exist in the dataframe
-        available_features = [f for f in features if f in df.columns]
-        X = df[available_features].values
-        
-        # Scale input for KNN using the same scaler
         try:
-            scaled_input = scaler.transform(input_data[available_features])
+            predicted_price = model.predict(input_data)[0]
         except Exception as e:
-            print(f"Error scaling input: {e}")
-            # If scaling fails, use original values
-            scaled_input = input_data[available_features].values
+            print(f"Error in prediction: {e}")
+            return jsonify({
+                'status': 'error',
+                'message': f'Error making prediction: {str(e)}'
+            }), 500
+        
+        # Prepare input for KNN with one-hot encoded brand
+        input_knn = input_data.copy()
+        
+        # One-hot encode the brand for KNN
+        if not all_brand_columns:  # Fallback if all_brand_columns is empty
+            scaled_input = scaler.transform(input_data[numeric_features])
+        else:
+            for col in all_brand_columns:
+                input_knn[col] = 1 if col == f'brand_{brand}'.lower() else 0
+            
+            # Ensure all required columns are present
+            for col in numeric_features + all_brand_columns:
+                if col not in input_knn.columns:
+                    input_knn[col] = 0
+                    
+            # Scale only the numeric features
+            input_knn_scaled = input_knn[numeric_features + all_brand_columns].copy()
+            input_knn_scaled[numeric_features] = scaler.transform(input_knn[numeric_features])
+            
+            # Get similar phones using KNN
+            scaled_input = input_knn_scaled[numeric_features + all_brand_columns].values
+        
+        # Get feature importance from the model
+        try:
+            # For one-hot encoded features, we need to handle them differently
+            if hasattr(model.named_steps['regressor'], 'coef_'):
+                # Get the one-hot encoded feature names
+                ohe = model.named_steps['preprocessor'].named_transformers_['cat'].named_steps['onehot']
+                ohe_feature_names = ohe.get_feature_names_out(categorical_features)
+                
+                # Combine all feature names
+                all_feature_names = numeric_features + list(ohe_feature_names)
+                
+                # Get coefficients
+                coef = model.named_steps['regressor'].coef_
+                
+                # For one-hot encoded features, we'll group them by the original feature
+                feature_importance = {}
+                for i, name in enumerate(all_feature_names):
+                    if name.startswith('brand_'):
+                        base_feature = 'brand'
+                        feature_importance[base_feature] = feature_importance.get(base_feature, 0) + abs(coef[i])
+                    elif name in numeric_features:
+                        feature_importance[name] = abs(coef[i])
+                
+                features_importance = feature_importance
+            else:
+                features_importance = {}
+        except Exception as e:
+            features_importance = {}
+            print(f"Could not calculate feature importance: {str(e)}")
         
         # Find nearest neighbors
         try:
