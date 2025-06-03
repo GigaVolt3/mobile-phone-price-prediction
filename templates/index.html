@@ -87,29 +87,105 @@
         }
         
         .similar-phone {
-            background: white;
-            border-radius: 10px;
+            transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
+            border-radius: 12px;
+            overflow: hidden;
+            height: 100%;
+            background: #fff;
+            border: 1px solid rgba(0, 0, 0, 0.08);
+        }
+        
+        .similar-phone .card-body {
             padding: 1.25rem;
-            margin-bottom: 1rem;
-            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.05);
-            transition: all 0.3s ease;
         }
         
         .similar-phone:hover {
-            transform: translateX(5px);
-            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
+            transform: translateY(-5px);
+            box-shadow: 0 10px 25px rgba(67, 97, 238, 0.15) !important;
+            border-color: transparent;
         }
         
-        .similarity-badge {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            background: var(--accent-color);
-            color: white;
-            padding: 0.25rem 0.75rem;
-            border-radius: 20px;
-            font-size: 0.8rem;
+        .similar-phone .card-title {
+            font-size: 1.05rem;
+            color: #2d3748;
+            margin-bottom: 0.5rem;
+            line-height: 1.3;
+            max-width: 80%;
+        }
+        
+        .similar-phone .badge {
+            font-weight: 500;
+            letter-spacing: 0.3px;
+            padding: 0.35em 0.65em;
+            font-size: 0.75rem;
+        }
+        
+        .similar-phone .similarity-badge {
+            background: rgba(67, 97, 238, 0.1);
+            color: #4361ee;
             font-weight: 600;
+            padding: 0.25rem 0.6rem;
+            border-radius: 6px;
+            font-size: 0.75rem;
+            border: 1px solid rgba(67, 97, 238, 0.2);
+        }
+        
+        .similar-phone .price {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: #2d3748;
+            margin: 0.5rem 0;
+        }
+        
+        .similar-phone .specs-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 0.5rem;
+            margin: 1rem 0;
+        }
+        
+        .similar-phone .spec-item {
+            display: flex;
+            align-items: center;
+            font-size: 0.85rem;
+            color: #4a5568;
+        }
+        
+        .similar-phone .spec-item i {
+            margin-right: 0.5rem;
+            color: #718096;
+            width: 18px;
+            text-align: center;
+        }
+        
+        .similar-phone .btn {
+            font-weight: 500;
+            padding: 0.4rem 1rem;
+            border-radius: 6px;
+            transition: all 0.2s ease;
+        }
+        
+        .similar-phone .btn i {
+            margin-right: 0.4rem;
+        }
+        
+        /* Responsive adjustments */
+        @media (max-width: 767.98px) {
+            .similar-phone .card-body {
+                padding: 1rem;
+            }
+            
+            .similar-phone .card-title {
+                font-size: 1rem;
+            }
+            
+            .similar-phone .specs-grid {
+                gap: 0.5rem 0.75rem;
+            }
+            
+            .similar-phone .spec-item {
+                font-size: 0.8rem;
+            }
         }
         
         .feature-icon {
@@ -435,7 +511,6 @@
                     data: formDataEncoded,
                     success: function(response) {
                         if (response.status === 'success') {
-                            // Update predicted price
                             // Update predicted price with clear label and styling
                             const predictedPrice = parseFloat(response.predicted_price).toFixed(2);
                             $('#predictedPrice').html(`
@@ -448,62 +523,105 @@
                                         </div>
                                     </div>
                                     <div class="d-flex justify-content-between text-muted small">
-                                        <span>Based on your specifications</span>
-                                        <span><i class="fas fa-info-circle"></i> Estimate</span>
-                                    </div>
-                                </div>
-                            `);
+                                        <span>Based on your specifications</span>`);
                             
-                            // Display similar phones
+                            // Display similar phones with improved layout and error handling
                             const similarPhonesList = $('#similarPhonesList');
                             similarPhonesList.empty();
                             
                             // Add a header for similar phones section
                             similarPhonesList.append(`
                                 <div class="mb-3 border-bottom pb-3">
-                                    <h5 class="fw-bold">Market Comparison</h5>
-                                    <p class="small text-muted mb-0">Actual market prices for phones with similar specifications</p>
+                                    <div class="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h5 class="fw-bold mb-1">Market Comparison</h5>
+                                            <p class="small text-muted mb-0">Actual market prices for phones with similar specifications</p>
+                                        </div>
+                                        <span class="badge bg-primary rounded-pill">${response.similar_phones ? response.similar_phones.length : 0} phones</span>
+                                    </div>
+                                </div>
+                                <div class="row g-3" id="similarPhonesGrid">
+                                    <!-- Similar phones will be inserted here -->
                                 </div>
                             `);
                             
+                            const similarPhonesGrid = $('#similarPhonesGrid');
+                            
                             if (response.similar_phones && response.similar_phones.length > 0) {
-                                response.similar_phones.forEach(phone => {
-                                    const phoneElement = `
-                                        <div class="similar-phone position-relative">
-
-                                            <h5 class="phone-model mb-1">${phone.brand} ${phone.model}</h5>
-                                            <div class="d-flex justify-content-between align-items-center mb-2">
-                                                <span class="similar-price">${formatPrice(phone.price)}</span>
-                                                <span class="similarity-badge">${phone.similarity_score}% match</span>
-                                            </div>
-                                            <div class="row mt-2">
-                                                <div class="col-6">
-                                                    <small class="text-muted">
-                                                        <i class="fas fa-memory me-1"></i> ${phone.ram}GB RAM
-                                                    </small>
+                                response.similar_phones.forEach(function(phone) {
+                                    try {
+                                        // Ensure we have required fields
+                                        const phoneId = phone.id || '';
+                                        const brand = phone.brand || 'Unknown';
+                                        const model = phone.model || '';
+                                        const price = parseFloat(phone.price) || 0;
+                                        const ram = parseFloat(phone.ram) || 0;
+                                        const storage = parseFloat(phone.storage) || 0;
+                                        const battery = parseInt(phone.battery) || 0;
+                                        const screenSize = parseFloat(phone.screen_size) || 0;
+                                        const similarity = parseFloat(phone.similarity_score) || 0;
+                                        
+                                        const phoneElement = `
+                                            <div class="col-12 col-md-6 col-lg-12">
+                                                <div class="similar-phone card h-100 border-0 shadow-sm hover-shadow transition">
+                                                    <div class="card-body p-3">
+                                                        <div class="d-flex justify-content-between align-items-start mb-2">
+                                                            <h6 class="card-title mb-1 fw-bold text-truncate" title="${brand} ${model}">
+                                                                ${brand} ${model}
+                                                            </h6>
+                                                            <span class="badge bg-light text-dark" style="min-width: 60px;">
+                                                                ${Math.round(similarity)}% match
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        <div class="d-flex justify-content-between align-items-center mb-3">
+                                                            <span class="h5 mb-0 text-primary fw-bold">${formatPrice(price)}</span>
+                                                            ${phone.rating ? `
+                                                                <span class="badge bg-warning bg-opacity-10 text-warning">
+                                                                    <i class="fas fa-star text-warning"></i> ${parseFloat(phone.rating).toFixed(1)}
+                                                                </span>
+                                                            ` : ''}
+                                                        </div>
+                                                        
+                                                        <div class="row g-2 mb-3">
+                                                            <div class="col-6">
+                                                                <div class="d-flex align-items-center text-muted small">
+                                                                    <i class="fas fa-memory me-1"></i>
+                                                                    <span>${ram}GB RAM</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <div class="d-flex align-items-center text-muted small">
+                                                                    <i class="fas fa-database me-1"></i>
+                                                                    <span>${storage}GB</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <div class="d-flex align-items-center text-muted small">
+                                                                    <i class="fas fa-battery-three-quarters me-1"></i>
+                                                                    <span>${battery.toLocaleString('en-IN')} mAh</span>
+                                                                </div>
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <div class="d-flex align-items-center text-muted small">
+                                                                    <i class="fas fa-mobile-alt me-1"></i>
+                                                                    <span>${screenSize}"</span>
+                                                                </div>
+                                                            </div>
+                                                        </div>
+                                                        
+                                                        <a href="#" class="btn btn-outline-primary btn-sm w-100 view-phone-details" data-phone-id="${phoneId}">
+                                                            <i class="fas fa-search-plus me-1"></i> View Full Specs
+                                                        </a>
+                                                    </div>
                                                 </div>
-                                                <div class="col-6">
-                                                    <small class="text-muted">
-                                                        <i class="fas fa-database me-1"></i> ${phone.storage}GB
-                                                    </small>
-                                                </div>
-                                                <div class="col-6">
-                                                    <small class="text-muted">
-                                                        <i class="fas fa-battery-three-quarters me-1"></i> ${phone.battery.toLocaleString('en-IN')}mAh
-                                                    </small>
-                                                </div>
-                                                <div class="col-6">
-                                                    <small class="text-muted">
-                                                        <i class="fas fa-mobile-alt me-1"></i> ${phone.screen_size}"
-                                                    </small>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    `;
-                                    similarPhonesList.append(phoneElement);
+                                            </div>`;
+                                        
+                                        similarPhonesGrid.append(phoneElement);
+                                    } catch (e) {
+                                        console.error('Error rendering similar phone:', e);
+                                    }
                                 });
-                            } else {
-                                similarPhonesList.html('<div class="no-results">No similar phones found</div>');
                             }
                             
                             // Show results
@@ -525,6 +643,18 @@
             var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
             var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
                 return new bootstrap.Tooltip(tooltipTriggerEl);
+            });
+            
+            // Handle phone details link clicks
+            $(document).on('click', '.view-phone-details', function(e) {
+                e.preventDefault();
+                const phoneId = $(this).data('phone-id');
+                if (phoneId !== undefined && phoneId !== '') {
+                    window.location.href = '/phone/' + phoneId;
+                } else {
+                    console.error('Invalid phone ID:', phoneId);
+                    alert('Error: Could not load phone details. Invalid phone ID.');
+                }
             });
         });
     </script>
