@@ -27,6 +27,9 @@ def load_data():
         # Load the dataset
         df = pd.read_csv("mobile.csv")
         
+        # Create a copy of the dataframe to avoid SettingWithCopyWarning
+        df = df.copy()
+        
         # Basic cleaning
         df = df.rename(columns={
             'brand_name': 'brand',
@@ -41,22 +44,27 @@ def load_data():
         
         # Convert storage to GB
         def convert_to_gb(x):
-            if pd.isna(x):
+            try:
+                if pd.isna(x):
+                    return 0
+                if isinstance(x, str):
+                    if 'TB' in x.upper():
+                        return float(x.upper().replace('TB', '').strip()) * 1024
+                    if 'GB' in x.upper():
+                        return float(x.upper().replace('GB', '').strip())
+                return float(x) if pd.notna(x) else 0
+            except Exception as e:
+                print(f"Error converting value {x} to GB: {e}")
                 return 0
-            if isinstance(x, str):
-                if 'TB' in x.upper():
-                    return float(x.upper().replace('TB', '').strip()) * 1024
-                if 'GB' in x.upper():
-                    return float(x.upper().replace('GB', '').strip())
-            return float(x) if pd.notna(x) else 0
         
-        df['storage'] = df['storage'].apply(convert_to_gb)
+        df['storage'] = df['storage'].apply(convert_to_gb).astype(float)
         
         # Fill missing values
         numeric_features = ['ram', 'storage', 'battery', 'screen_size', 'refresh_rate', 'rear_cameras']
         for feature in numeric_features:
             df[feature] = pd.to_numeric(df[feature], errors='coerce')
-            df[feature] = df[feature].fillna(df[feature].median())
+            median_value = df[feature].median()
+            df[feature] = df[feature].fillna(median_value).astype(float)
         
         # Get unique brands
         brands = sorted(df['brand'].str.upper().unique().tolist())
